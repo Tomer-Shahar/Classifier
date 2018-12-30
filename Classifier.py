@@ -5,6 +5,8 @@ Builds a classification model and classifies a given file.
 import os
 from time import time
 
+import matplotlib.pyplot as plt
+import numpy as np
 from sklearn import metrics
 from sklearn.datasets import load_files
 from sklearn.feature_extraction.text import CountVectorizer
@@ -12,26 +14,25 @@ from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import SGDClassifier, Perceptron
 from sklearn.naive_bayes import MultinomialNB
-import numpy as np
-import matplotlib.pyplot as plt
 
 
 class Classifier:
 
-    def __init__(self, courpus_path=None, train_data=None, target_data=None):
+    def __init__(self, corpus_path=None, train_data=None, target_data=None):
+        
         if train_data:
             self.training_data = train_data
         else:
-            self.training_data = load_files(courpus_path + '\\training', encoding='utf-8')
+            self.training_data = load_files(corpus_path + '\\training', encoding='utf-8')
 
         if target_data:
             self.test_data = target_data
         else:
-            self.test_data = load_files(courpus_path + '\\test', encoding='utf-8')
+            self.test_data = load_files(corpus_path + '\\test', encoding='utf-8')
 
         self.__clf_list = ((SGDClassifier(), "SVM"), (Perceptron(), "Perceptron"), (MultinomialNB(), "Naive Bayes"))
-        self.__model_list = (("tf_idf", self.tf_idf_feature_extraction()), ("bigram", self.bigram_feature_extraction()),
-                             ("hash", self.hash_feature_extraction()))
+        self.__model_list = (("tf_idf", self.tf_idf_feature_extraction), ("bigram", self.bigram_feature_extraction), ("hash", self.hash_feature_extraction))
+
 
     def tf_idf_feature_extraction(self):
         """
@@ -53,47 +54,47 @@ class Classifier:
     def bigram_feature_extraction(self):
         """
         Extract features with bigram
-        :param data: the training data to extract from
         :return: vector with the features
         """
         print('=' * 80)
         print('Bigram Feature Extraction')
         t0 = time()
-        bigram_vectorizer = CountVectorizer(ngram_range=(1, 2), token_pattern=r'\b\w+\b', min_df=1)
+        bigram_vectorizer = CountVectorizer(max_features=1500, min_df=5, max_df=0.7, stop_words='english')
         bigram_train = bigram_vectorizer.fit_transform(self.training_data.data)
-        bigram_test = bigram_vectorizer.fit_transform(self.test_data.data)
+        bigram_test = bigram_vectorizer.transform(self.test_data.data)
         duration = time() - t0
         print("DONE!!! total time: %fs" % duration)
-        print('*' * 50)
+        print('=' * 80)
         return bigram_train, bigram_test
 
     def hash_feature_extraction(self):
         print('=' * 80)
         print("Hash Feature Extraction")
         t0 = time()
-        hash_vectorizer = HashingVectorizer()
+        hash_vectorizer = HashingVectorizer(non_negative=True)
         hash_train = hash_vectorizer.fit_transform(self.training_data.data)
-        hash_test = hash_vectorizer.fit_transform(self.test_data.data)
+        hash_test = hash_vectorizer.transform(self.test_data.data)
         duration = time() - t0
         print("DONE!!! total time: %fs" % duration)
         print('=' * 80)
         return hash_train, hash_test
 
-    def train_model(self, train_data):
+    def train_model(self):
         """
-        :param train_data:
         :return:
         """
-
         results = []
+        scores = []
         for model_name, model_function in self.__model_list:
-            train, test = model_function
+            print(model_name)
+            train, test = model_function()
             for clf, name in self.__clf_list:
                 print('=' * 80)
                 print(name)
                 results.append(self.classification(clf, train, test))
-            self.plot_compare(results)
+            scores = scores + self.plot_compare(results, name=model_name)
             results = []
+        self.bestScore(scores)
 
     def classification(self, clf, model_train_data, model_test_data):
         """
@@ -104,7 +105,7 @@ class Classifier:
         :return:
         """
         print('=' * 80)
-        print('TF_IDF Training')
+        print('Training:')
         print(clf)
         t0_training = time()
         clf.fit(model_train_data, self.training_data.target)
@@ -137,16 +138,19 @@ class Classifier:
 
         return train_data
 
-    def plot_compare(self, results):
+    @staticmethod
+    def plot_compare(results, name=""):
         scores = []
-        print("TF-IDF")
+        print(name)
         indices = np.arange(len(results))
         results = [[x[i] for x in results] for i in range(4)]
         clf_names, score, training_time, test_time = results
+        for s in score:
+            scores.append(s)
         training_time = np.array(training_time) / np.max(training_time)
         test_time = np.array(test_time) / np.max(test_time)
-        plt.figure(figsize=(12,8))
-        plt.title("Score")
+        plt.figure(figsize=(12, 8))
+        plt.title(name + "Score")
         plt.barh(indices, score, .2, label="score", color="navy")
         plt.barh(indices + .3, training_time, .2, label="training time", color='c')
         plt.barh(indices + .6, test_time, .2, label="test time", color="darkorange")
@@ -155,3 +159,30 @@ class Classifier:
         plt.subplots_adjust(left=.25)
         plt.subplots_adjust(top=.95)
         plt.subplots_adjust(bottom=.05)
+
+        for i, c in zip(indices, clf_names):
+            plt.text(-.3, i, c)
+        plt.show()
+        return scores
+
+    def bestScore(self, scores):
+        best_index = scores.index(max(scores))
+        print("The best classification for this corpus is:")
+        if 0 == best_index:
+            print("feature extraction: tf-idf, classification: SVM")
+        if 1 == best_index:
+            print("feature extraction: tf-idf, classification: Perceptron")
+        if 2 == best_index:
+            print("feature extraction: tf-idf, classification: Naive Base")
+        if 3 == best_index:
+            print("feature extraction: bigram, classification: SVM")
+        if 4 == best_index:
+            print("feature extraction: bigram, classification: Perceptron")
+        if 5 == best_index:
+            print("feature extraction: bigram, classification: Naive Base")
+        if 6 == best_index:
+            print("feature extraction: hash, classification: SVM")
+        if 7 == best_index:
+            print("feature extraction: hash, classification: Perceptron")
+        if 8 == best_index:
+            print("feature extraction: hash, classification: Naive Base")
