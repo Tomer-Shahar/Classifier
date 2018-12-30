@@ -3,6 +3,7 @@ The class for part 2 of the assignment
 Builds a classification model and classifies a given file.
 """
 import os
+import warnings
 from time import time
 
 import matplotlib.pyplot as plt
@@ -13,13 +14,14 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import SGDClassifier, Perceptron
+from sklearn.model_selection import GridSearchCV
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
 
 
 class Classifier:
 
     def __init__(self, corpus_path=None, train_data=None, target_data=None):
-        
         if train_data:
             self.training_data = train_data
         else:
@@ -31,8 +33,9 @@ class Classifier:
             self.test_data = load_files(corpus_path + '\\test', encoding='utf-8')
 
         self.__clf_list = ((SGDClassifier(), "SVM"), (Perceptron(), "Perceptron"), (MultinomialNB(), "Naive Bayes"))
-        self.__model_list = (("tf_idf", self.tf_idf_feature_extraction), ("bigram", self.bigram_feature_extraction), ("hash", self.hash_feature_extraction))
-
+        self.__model_list = (("tf_idf", self.tf_idf_feature_extraction), ("bigram", self.bigram_feature_extraction),
+                             ("hash", self.hash_feature_extraction))
+        warnings.filterwarnings('ignore')
 
     def tf_idf_feature_extraction(self):
         """
@@ -94,9 +97,9 @@ class Classifier:
                 results.append(self.classification(clf, train, test))
             scores = scores + self.plot_compare(results, name=model_name)
             results = []
-        self.bestScore(scores)
+        self.best_score(scores)
 
-    def classification(self, clf, model_train_data, model_test_data):
+    def classification(self, clf, model_train_data, model_test_data, clf_alpha=None):
         """
         Training and classification with given model
         :param model_test_data:
@@ -165,7 +168,8 @@ class Classifier:
         plt.show()
         return scores
 
-    def bestScore(self, scores):
+    @staticmethod
+    def best_score(scores):
         best_index = scores.index(max(scores))
         print("The best classification for this corpus is:")
         if 0 == best_index:
@@ -186,3 +190,17 @@ class Classifier:
             print("feature extraction: hash, classification: Perceptron")
         if 8 == best_index:
             print("feature extraction: hash, classification: Naive Base")
+
+    def optimize(self):
+        nb_clf = Pipeline([('vect', TfidfVectorizer(sublinear_tf=True, max_df=0.5, stop_words='english')), ('clf', SGDClassifier(penalty='l1'))])
+        parameters = {
+            #'clf__alpha': (0.0001, 0.1, 1.0),
+            'clf__penalty': ('none', 'l2', 'l1', 'elasticnet'),
+            'clf__average': (True, False)
+        }
+        print("Searching")
+        gs_clf = GridSearchCV(nb_clf, parameters, n_jobs=1)
+        print("fitting")
+        gs_clf = gs_clf.fit(self.training_data.data, self.training_data.target)
+        print('Best score: ', gs_clf.best_score_)
+        print('Best params: ', gs_clf.best_params_)

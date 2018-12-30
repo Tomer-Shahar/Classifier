@@ -1,9 +1,6 @@
 """
 The main class that will run the different modules of the assignment
 """
-from sklearn.linear_model import SGDClassifier, Perceptron
-from sklearn.naive_bayes import MultinomialNB
-
 from preprocessor import PreProcessor
 from Classifier import Classifier
 
@@ -17,9 +14,8 @@ if __name__ == '__main__':
     # prep.load_statistics('.\\statistics')
     # prep.print_statistics()
 
-    clf_list = ((SGDClassifier(), "SVM"), (Perceptron(), "Perceptron"), (MultinomialNB(), "Naive Bayes"))
-
-    classifer = Classifier(corpus_path='.\\ohsumed-first-20000-docs')
-    classifer.train_model()
+    classifer = Classifier(corpus_path='.\\output')
+    # classifer.train_model()
+    classifer.optimize()
 
 
