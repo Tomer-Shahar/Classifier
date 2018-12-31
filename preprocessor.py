@@ -85,24 +85,25 @@ class PreProcessor:
         Print data regarding the parsed files.
         """
         self.write_statistics()
-        print("Number of categories: " + str(self.category_num))
-        print("Number of documents per category:")
-        i = 1
-        for cat_id, num in self.num_of_docs_per_category.items():
-            print(str(i) + '. ' + self.categories[cat_id] + ": " + str(num))
-            i += 1
+        print("---------- Number of categories: " + str(self.category_num) + " ----------")
+        print()
+        print("---------- Number of Documents per Category ----------")
 
-        print()
-        print("Top 10 Words Per Category: ")
-        print()
+        indices = [self.categories[category] for category in self.categories]
+        num_df = pd.DataFrame(columns=['Number of Documents'], index=indices)
+        for cat_id, num in self.num_of_docs_per_category.items():
+            num_df.loc[self.categories[cat_id]] = num
+
+        print(num_df)
+        print("\n\n---------- Top 10 Words Per Category ----------")
         cols = []
-        indices = [category for category in self.categories]
         for i in range(1, 11):
             cols.append(i)
-        stats_df = pd.DataFrame(columns=cols, index=indices)
 
+        stats_df = pd.DataFrame(columns=cols, index=indices)
         for category, top_ten in self.top_ten_terms_per_category.items():
-            stats_df.loc[category] = top_ten
+            stats_df.loc[self.categories[category]] = top_ten
+            # stats_df.loc[category] = top_ten
 
         print(stats_df)
 
