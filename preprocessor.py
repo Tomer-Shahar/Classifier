@@ -2,6 +2,7 @@ from Parser import Parser
 import os
 import json
 import matplotlib.pyplot as plt
+import pandas as pd
 import math
 
 
@@ -94,13 +95,16 @@ class PreProcessor:
         print()
         print("Top 10 Words Per Category: ")
         print()
+        cols = []
+        indices = [category for category in self.categories]
+        for i in range(1, 11):
+            cols.append(i)
+        stats_df = pd.DataFrame(columns=cols, index=indices)
 
         for category, top_ten in self.top_ten_terms_per_category.items():
-            print(self.categories[category] + ":")
-            for i in range(len(top_ten)):
-                print(str(i+1) + ". \'" + top_ten[i][0] + "\' appeared " + str(top_ten[i][1]) + " times")
+            stats_df.loc[category] = top_ten
 
-            print()
+        print(stats_df)
 
         self.generate_histograms()
 
