@@ -1,21 +1,22 @@
 """
 The main class that will run the different modules of the assignment
 """
-from preprocessor import PreProcessor
-import pandas as pd
+import warnings
+
 from Classifier import Classifier
+from preprocessor import PreProcessor
+
+warnings.filterwarnings('ignore')
 
 if __name__ == '__main__':
-    corpus_path = 'D:\ohsumed-first-20000-docs'  # PATH TO THE CORPUS FOLDER THAT CONTAINS THE SUB-FOLDERS
-    output_path = 'D:\parsed_files'  # Output path where the statistics and parsed files will be saved
+    corpus_path = '.\\ohsumed-first-20000-docs'  # PATH TO THE CORPUS FOLDER THAT CONTAINS THE SUB-FOLDERS
+    output_path = '.\\output'  # Output path where the statistics and parsed files will be saved
 
     prep = PreProcessor(corpus_path, output_path)
-    #prep.process_all_files()
-    prep.load_statistics('D:\parsed_files\statistics')
+    prep.process_all_files()
+    prep.load_statistics('.\\output\\statistics')
     prep.print_statistics()
 
-    #classifer = Classifier(corpus_path='.\\output')
-    # classifer.train_model()
-    #classifer.optimize()
-
-
+    classifier = Classifier(corpus_path=output_path)
+    classifier.train_model()
+    classifier.train_optimise()

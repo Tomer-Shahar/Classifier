@@ -2,21 +2,19 @@
 The class for part 2 of the assignment
 Builds a classification model and classifies a given file.
 """
-import os
 import warnings
 from time import time
 
-import matplotlib.pyplot as plt
-import numpy as np
 from sklearn import metrics
 from sklearn.datasets import load_files
+from sklearn.exceptions import DataConversionWarning
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import SGDClassifier, Perceptron
 from sklearn.model_selection import GridSearchCV
-from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
+
+
 
 
 class Classifier:
@@ -32,10 +30,10 @@ class Classifier:
         else:
             self.test_data = load_files(corpus_path + '\\test', encoding='utf-8')
 
-        self.__clf_list = ((SGDClassifier(), "SVM"), (Perceptron(), "Perceptron"), (MultinomialNB(), "Naive Bayes"))
-        self.__model_list = (("tf_idf", self.tf_idf_feature_extraction), ("bigram", self.bigram_feature_extraction),
-                             ("hash", self.hash_feature_extraction))
-        warnings.filterwarnings('ignore')
+        self.__clf_list = ((SGDClassifier(), "SVM"), (Perceptron(), "Perceptron"))
+        self.__clf_funcs = [SGDClassifier, Perceptron]
+        self.__model_list = (("tf_idf", self.tf_idf_feature_extraction), ("bigram", self.bigram_feature_extraction))
+        self.__vect_funcs = (('tf_idf', TfidfVectorizer), ('bigram', CountVectorizer))
 
     def tf_idf_feature_extraction(self):
         """
@@ -46,7 +44,7 @@ class Classifier:
         print('=' * 80)
         print("TF-IDF Feature Extraction")
         t0 = time()
-        vectorizer = TfidfVectorizer(sublinear_tf=True, max_df=0.5, stop_words='english')
+        vectorizer = TfidfVectorizer()
         vec_train = vectorizer.fit_transform(self.training_data.data)
         vec_test = vectorizer.transform(self.test_data.data)
         duration = time() - t0
@@ -62,7 +60,7 @@ class Classifier:
         print('=' * 80)
         print('Bigram Feature Extraction')
         t0 = time()
-        bigram_vectorizer = CountVectorizer(max_features=1500, min_df=5, max_df=0.7, stop_words='english')
+        bigram_vectorizer = CountVectorizer()
         bigram_train = bigram_vectorizer.fit_transform(self.training_data.data)
         bigram_test = bigram_vectorizer.transform(self.test_data.data)
         duration = time() - t0
@@ -70,36 +68,61 @@ class Classifier:
         print('=' * 80)
         return bigram_train, bigram_test
 
-    def hash_feature_extraction(self):
-        print('=' * 80)
-        print("Hash Feature Extraction")
-        t0 = time()
-        hash_vectorizer = HashingVectorizer(non_negative=True)
-        hash_train = hash_vectorizer.fit_transform(self.training_data.data)
-        hash_test = hash_vectorizer.transform(self.test_data.data)
-        duration = time() - t0
-        print("DONE!!! total time: %fs" % duration)
-        print('=' * 80)
-        return hash_train, hash_test
-
     def train_model(self):
         """
         :return:
         """
-        results = []
-        scores = []
         for model_name, model_function in self.__model_list:
             print(model_name)
+            scores = []
             train, test = model_function()
             for clf, name in self.__clf_list:
                 print('=' * 80)
                 print(name)
-                results.append(self.classification(clf, train, test))
-            scores = scores + self.plot_compare(results, name=model_name)
-            results = []
-        self.best_score(scores)
+                scores.append(self.classification(clf, train, test))
+            self.best_score(scores)
 
-    def classification(self, clf, model_train_data, model_test_data, clf_alpha=None):
+    def train_optimise(self):
+        training_scores = []
+        best_params_list = []
+        for vect_name, vect_func in self.__vect_funcs:
+            print(vect_name)
+            for clf_func, clf_name in self.__clf_list:
+                print('=' * 80)
+                print(clf_name)
+                t_score, best_params = self.optimize(vect_func, clf_func)
+                training_scores.extend([t_score])
+                best_params_list.extend([best_params])
+        vect_index, clf_index, best_index = self.best_score(training_scores)
+        self.run_best_model(vect_index, clf_index, best_params_list[best_index])
+
+    def run_best_model(self, vect_index, clf_index, best_params):
+        vect_name, vect_func = self.__vect_funcs[vect_index]
+        vect = vect_func()
+        print('=' * 80)
+        print(str(vect_name) + " Feature Extraction")
+        t0 = time()
+        vec_train = vect.fit_transform(self.training_data.data)
+        vec_test = vect.transform(self.test_data.data)
+        duration = time() - t0
+        print("DONE!!! total time: %fs" % duration)
+        print('=' * 80)
+        clf_func = self.__clf_funcs[clf_index]
+        clf = clf_func(alpha=best_params.get('clf__alpha'), penalty=best_params.get('clf__penalty'))
+        print('Training:')
+        print(clf)
+        t0_training = time()
+        clf.fit(vec_train, self.training_data.target)
+        train_time = time() - t0_training
+        print("train time: %0.3fs" % train_time)
+        t0_test = time()
+        pred = clf.predict(vec_test)
+        test_time = time() - t0_test
+        print("test time: %0.3fs" % test_time)
+        score = metrics.accuracy_score(self.test_data.target, pred)
+        print('accuracy:  ' + str(score))
+
+    def classification(self, clf, model_train_data, model_test_data):
         """
         Training and classification with given model
         :param model_test_data:
@@ -115,58 +138,14 @@ class Classifier:
         train_time = time() - t0_training
         print("train time: %0.3fs" % train_time)
 
-        t0_test = time()
-        prediction = clf.predict(model_test_data)
-        test_time = time() - t0_test
-        print("test time: %0.3fs" % test_time)
+        t0 = time()
+        pred = clf.predict(model_test_data)
+        test_time = time() - t0
+        print("test time:  %0.3fs" % test_time)
 
-        score = metrics.accuracy_score(self.test_data.target, prediction)
-        print("the score is: %0.3f" % score)
-        print()
-        clf_descr = str(clf).split('(')[0]
-        return clf_descr, score, train_time, test_time
-
-    @staticmethod
-    def read_train_data(train_data_path):
-
-        train_data = []
-        for root, dirs, corpus_files in os.walk(train_data_path):
-            for folder in dirs:  # Walks each category folder.
-                for category_folder, directories, files in os.walk(os.path.join(train_data_path, folder)):
-                    for file in files:
-                        text_file = open(os.path.join(category_folder, file), 'r').read()
-                        train_data.append(text_file)
-
-            break
-
-        return train_data
-
-    @staticmethod
-    def plot_compare(results, name=""):
-        scores = []
-        print(name)
-        indices = np.arange(len(results))
-        results = [[x[i] for x in results] for i in range(4)]
-        clf_names, score, training_time, test_time = results
-        for s in score:
-            scores.append(s)
-        training_time = np.array(training_time) / np.max(training_time)
-        test_time = np.array(test_time) / np.max(test_time)
-        plt.figure(figsize=(12, 8))
-        plt.title(name + "Score")
-        plt.barh(indices, score, .2, label="score", color="navy")
-        plt.barh(indices + .3, training_time, .2, label="training time", color='c')
-        plt.barh(indices + .6, test_time, .2, label="test time", color="darkorange")
-        plt.yticks(())
-        plt.legend(loc='best')
-        plt.subplots_adjust(left=.25)
-        plt.subplots_adjust(top=.95)
-        plt.subplots_adjust(bottom=.05)
-
-        for i, c in zip(indices, clf_names):
-            plt.text(-.3, i, c)
-        plt.show()
-        return scores
+        score = metrics.accuracy_score(self.test_data.target, pred)
+        print("accuracy:   " + str(score))
+        return score
 
     @staticmethod
     def best_score(scores):
@@ -174,33 +153,39 @@ class Classifier:
         print("The best classification for this corpus is:")
         if 0 == best_index:
             print("feature extraction: tf-idf, classification: SVM")
+            print(str(scores[best_index]))
+            return 0, 0, best_index
         if 1 == best_index:
             print("feature extraction: tf-idf, classification: Perceptron")
+            print(str(scores[best_index]))
+            return 0, 1, best_index
         if 2 == best_index:
             print("feature extraction: tf-idf, classification: Naive Base")
+            print(str(scores[best_index]))
+            return 0, 2, best_index
         if 3 == best_index:
             print("feature extraction: bigram, classification: SVM")
+            print(str(scores[best_index]))
+            return 1, 0, best_index
         if 4 == best_index:
             print("feature extraction: bigram, classification: Perceptron")
+            print(str(scores[best_index]))
+            return 1, 1, best_index
         if 5 == best_index:
             print("feature extraction: bigram, classification: Naive Base")
-        if 6 == best_index:
-            print("feature extraction: hash, classification: SVM")
-        if 7 == best_index:
-            print("feature extraction: hash, classification: Perceptron")
-        if 8 == best_index:
-            print("feature extraction: hash, classification: Naive Base")
+            print(str(scores[best_index]))
+            return 1, 2, best_index
 
-    def optimize(self):
-        nb_clf = Pipeline([('vect', TfidfVectorizer(sublinear_tf=True, max_df=0.5, stop_words='english')), ('clf', SGDClassifier(penalty='l1'))])
+    def optimize(self, feature_func, classifier_func):
+        nb_clf = Pipeline([('vect', feature_func()),
+                           ('clf', classifier_func)])
         parameters = {
-            #'clf__alpha': (0.0001, 0.1, 1.0),
-            'clf__penalty': ('none', 'l2', 'l1', 'elasticnet'),
-            'clf__average': (True, False)
+            'clf__alpha': [0.001, 0.0001],
+            'clf__penalty': [None, 'l2', 'l1', 'elasticnet'],
         }
-        print("Searching")
-        gs_clf = GridSearchCV(nb_clf, parameters, n_jobs=1)
-        print("fitting")
+        gs_clf = GridSearchCV(nb_clf, parameters)
         gs_clf = gs_clf.fit(self.training_data.data, self.training_data.target)
-        print('Best score: ', gs_clf.best_score_)
-        print('Best params: ', gs_clf.best_params_)
+        print("Best parameters: " + str(gs_clf.best_params_))
+        print('Best score: ' + str(gs_clf.best_score_))
+        training_score = gs_clf.best_score_
+        return training_score, gs_clf.best_params_
