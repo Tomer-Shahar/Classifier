@@ -15,20 +15,18 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 
 
-
-
 class Classifier:
 
     def __init__(self, corpus_path=None, train_data=None, target_data=None):
         if train_data:
             self.training_data = train_data
         else:
-            self.training_data = load_files(corpus_path + '\\training', encoding='utf-8')
+            self.training_data = load_files(corpus_path + '\\training')
 
         if target_data:
             self.test_data = target_data
         else:
-            self.test_data = load_files(corpus_path + '\\test', encoding='utf-8')
+            self.test_data = load_files(corpus_path + '\\test')
 
         self.__clf_list = ((SGDClassifier(), "SVM"), (Perceptron(), "Perceptron"))
         self.__clf_funcs = [SGDClassifier, Perceptron]
@@ -72,15 +70,15 @@ class Classifier:
         """
         :return:
         """
+        scores = []
         for model_name, model_function in self.__model_list:
             print(model_name)
-            scores = []
             train, test = model_function()
             for clf, name in self.__clf_list:
                 print('=' * 80)
                 print(name)
                 scores.append(self.classification(clf, train, test))
-            self.best_score(scores)
+        self.best_score(scores)
 
     def train_optimise(self):
         training_scores = []
@@ -91,14 +89,14 @@ class Classifier:
                 print('=' * 80)
                 print(clf_name)
                 t_score, best_params = self.optimize(vect_func, clf_func)
-                training_scores.extend([t_score])
-                best_params_list.extend([best_params])
+                training_scores.append(t_score)
+                best_params_list.append(best_params)
         vect_index, clf_index, best_index = self.best_score(training_scores)
         self.run_best_model(vect_index, clf_index, best_params_list[best_index])
 
     def run_best_model(self, vect_index, clf_index, best_params):
         vect_name, vect_func = self.__vect_funcs[vect_index]
-        vect = vect_func()
+        vect = vect_func(max_df=best_params.get('vect__max_df'), stop_words=best_params.get('vect__stop_words'))
         print('=' * 80)
         print(str(vect_name) + " Feature Extraction")
         t0 = time()
@@ -108,9 +106,8 @@ class Classifier:
         print("DONE!!! total time: %fs" % duration)
         print('=' * 80)
         clf_func = self.__clf_funcs[clf_index]
-        clf = clf_func(alpha=best_params.get('clf__alpha'), penalty=best_params.get('clf__penalty'))
+        clf = clf_func()
         print('Training:')
-        print(clf)
         t0_training = time()
         clf.fit(vec_train, self.training_data.target)
         train_time = time() - t0_training
@@ -132,7 +129,6 @@ class Classifier:
         """
         print('=' * 80)
         print('Training:')
-        print(clf)
         t0_training = time()
         clf.fit(model_train_data, self.training_data.target)
         train_time = time() - t0_training
@@ -160,32 +156,25 @@ class Classifier:
             print(str(scores[best_index]))
             return 0, 1, best_index
         if 2 == best_index:
-            print("feature extraction: tf-idf, classification: Naive Base")
-            print(str(scores[best_index]))
-            return 0, 2, best_index
-        if 3 == best_index:
             print("feature extraction: bigram, classification: SVM")
             print(str(scores[best_index]))
             return 1, 0, best_index
-        if 4 == best_index:
+        if 3 == best_index:
             print("feature extraction: bigram, classification: Perceptron")
             print(str(scores[best_index]))
             return 1, 1, best_index
-        if 5 == best_index:
-            print("feature extraction: bigram, classification: Naive Base")
-            print(str(scores[best_index]))
-            return 1, 2, best_index
 
     def optimize(self, feature_func, classifier_func):
-        nb_clf = Pipeline([('vect', feature_func()),
-                           ('clf', classifier_func)])
+        nb_clf = Pipeline(steps=[('vect', feature_func()),
+                                 ('clf', classifier_func)])
         parameters = {
-            'clf__alpha': [0.001, 0.0001],
-            'clf__penalty': [None, 'l2', 'l1', 'elasticnet'],
+            'vect__max_df': [0.3, 0.5, 0.7],
+            'vect__stop_words': [None, 'english'],
         }
-        gs_clf = GridSearchCV(nb_clf, parameters)
+        gs_clf = GridSearchCV(nb_clf, parameters, scoring='f1_macro')
         gs_clf = gs_clf.fit(self.training_data.data, self.training_data.target)
         print("Best parameters: " + str(gs_clf.best_params_))
         print('Best score: ' + str(gs_clf.best_score_))
+        print('=' * 80)
         training_score = gs_clf.best_score_
         return training_score, gs_clf.best_params_
